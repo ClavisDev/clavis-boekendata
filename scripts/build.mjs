@@ -48,7 +48,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { join, dirname } from 'node:path';
+import { join, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -104,6 +104,12 @@ function canoniek(waarde) {
 
 const naarJson = (waarde, ruim = false) => JSON.stringify(canoniek(waarde), null, ruim ? 2 : undefined);
 const hash = (tekst) => createHash('sha256').update(tekst).digest('hex');
+
+// Sorteren op code-eenheid, niet met localeCompare: dat laatste hangt af van de
+// ICU-locale van de machine en zou dezelfde data op de ene machine anders ordenen dan
+// op de andere. De sorteerorde bepaalt de sleutelvolgorde in de output én de
+// inhoudshash, dus die moet overal gelijk zijn.
+const opCode = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /* ---------- normalisatie ---------- */
 
@@ -440,12 +446,12 @@ for (const t of titels) {
 }
 
 const doelen = {
-  minimumdoelen: Object.fromEntries([...minimumdoelen].sort(([a], [b]) => a.localeCompare(b))),
-  kerndoelen: Object.fromEntries([...kerndoelen].sort(([a], [b]) => a.localeCompare(b))),
+  minimumdoelen: Object.fromEntries([...minimumdoelen].sort(([a], [b]) => opCode(a, b))),
+  kerndoelen: Object.fromEntries([...kerndoelen].sort(([a], [b]) => opCode(a, b))),
 };
 
 const doelenIndexUit = Object.fromEntries(
-  [...doelenIndex].sort(([a], [b]) => a.localeCompare(b)).map(([code, isbns]) => [code, [...isbns].sort()]),
+  [...doelenIndex].sort(([a], [b]) => opCode(a, b)).map(([code, isbns]) => [code, [...isbns].sort()]),
 );
 
 const facetwaarden = {
@@ -473,7 +479,18 @@ for (const [isbn, inhoud] of titelBestanden) bestanden.set(join(TITELS, `${isbn}
 // De versie is de inhoudshash van alles hierboven: verandert de data niet, dan
 // verandert de versie niet, en dan geeft een regeneratie geen git-diff. De site
 // gebruikt hem als cache-buster achter de url's.
-const versie = hash([...bestanden].sort(([a], [b]) => a.localeCompare(b)).map(([pad, inhoud]) => `${pad}\n${hash(inhoud)}`).join('\n')).slice(0, 12);
+//
+// Alleen het pad ten opzichte van de repo gaat mee in de hash, nooit het absolute pad.
+// Anders hangt de versie af van waar de repo staat en geeft dezelfde data op een
+// runner een andere versie dan op een laptop.
+const relatief = (pad) => pad.slice(ROOT.length + 1).split(sep).join('/');
+const versie = hash(
+  [...bestanden]
+    .map(([pad, inhoud]) => [relatief(pad), inhoud])
+    .sort(([a], [b]) => opCode(a, b))
+    .map(([pad, inhoud]) => `${pad}\n${hash(inhoud)}`)
+    .join('\n'),
+).slice(0, 12);
 
 bestanden.set(join(DATA, 'meta.json'), naarJson({
   versie,
