@@ -13,18 +13,12 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { leesBron } from './bron.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = join(ROOT, 'data');
-
-function leesBron(naam) {
-  const gz = join(ROOT, 'source', `${naam}.gz`);
-  if (existsSync(gz)) return JSON.parse(gunzipSync(readFileSync(gz)).toString('utf8'));
-  return JSON.parse(readFileSync(join(ROOT, 'source', naam), 'utf8'));
-}
 
 // Objectsleutels sorteren zodat de vergelijking op inhoud gaat en niet op
 // sleutelvolgorde; array-orde blijft wél meetellen, die is inhoudelijk.
