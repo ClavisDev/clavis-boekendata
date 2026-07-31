@@ -26,8 +26,20 @@ edit hier. Verwijder je `data/`, dan bouwt de volgende run het opnieuw.
 
 ## Een nieuwe generatie publiceren
 
-1. Zet het nieuwe `boekmappings.json` gezipt in `source/` (de rauwe bron is 25 MB, gezipt
-   2,2 MB — gebruik `gzip -n -9` zodat hergzippen van dezelfde inhoud geen diff geeft).
+1. Zet het nieuwe `boekmappings.json` **ingepakt** in `source/`. Inpakken is nodig omdat
+   de webupload van GitHub bij 25 MB stopt en de rauwe bron daar net boven zit (25 MB,
+   ingepakt ruim 2 MB). Drie vormen mogen:
+
+   | Bestand | Hoe je die maakt |
+   |---|---|
+   | `source/boekmappings.json.zip` | rechtsklik → *Comprimeer* (macOS) of *Zip* (Windows) |
+   | `source/boekmappings.json.gz` | `gzip -n -9 -c boekmappings.json > boekmappings.json.gz` |
+   | `source/boekmappings.json` | alleen via `git push`, niet via de webupload |
+
+   Bij een zip hoort er precies één `.json` in te zitten; `__MACOSX`-ruis van macOS wordt
+   genegeerd. Zet er nooit twee vormen naast elkaar — dan stopt de build, omdat niet te
+   zien is welke generatie de bedoelde is.
+
 2. Nieuwe covers erbij in `covers/`.
 3. Committen en pushen naar `main`.
 
