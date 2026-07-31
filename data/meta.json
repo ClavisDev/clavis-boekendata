@@ -1,5 +1,58 @@
 {
-  "gegenereerd": "2026-07-11",
   "aantal": 1065,
-  "gebouwd": "2026-07-13T10:29:20.228Z"
+  "doelen": {
+    "indexsleutels": 3230,
+    "kerndoelen": 29,
+    "minimumdoelen": 192
+  },
+  "facetten": {
+    "categorie": [
+      "boek",
+      "speelgoed"
+    ],
+    "disciplines": [
+      "Aardrijkskunde",
+      "Attitudes",
+      "Bewegen en sport",
+      "Burgerschap",
+      "Geschiedenis",
+      "ICT",
+      "Kunst en cultuur",
+      "Lichamelijke opvoeding",
+      "Muzische vorming",
+      "Nederlands",
+      "Wetenschap en techniek",
+      "Wiskunde"
+    ],
+    "leergebieden": [
+      "Bewegen en sport",
+      "Burgerschap",
+      "Digitale geletterdheid",
+      "Kunst en cultuur",
+      "Mens en maatschappij",
+      "Mens en natuur",
+      "Moderne vreemde talen: Engels",
+      "Nederlands",
+      "Rekenen en wiskunde"
+    ],
+    "niveau": [
+      "peuter",
+      "kleuter",
+      "lager-onderbouw",
+      "lager-bovenbouw",
+      "oudere-lezer",
+      "young-adult"
+    ],
+    "pijlers": [
+      "Emotionele groei",
+      "Kennis",
+      "Liefde",
+      "Talent"
+    ],
+    "status": [
+      "voorstel"
+    ]
+  },
+  "gegenereerd": "2026-07-11",
+  "versie": "4b7f8d9d2b2e"
 }

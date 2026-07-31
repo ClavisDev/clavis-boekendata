@@ -1,0 +1,75 @@
+# Bouwt de statische datalaag uit source/ en legt data/ vast in de repo.
+#
+# Draait bij een push naar de bron, de covers of het buildscript — bewust níét bij een
+# wijziging in data/, want dat is de output van deze workflow zelf. Dat voorkomt een
+# lus. Daarnaast is er een handmatige knop (Actions > Datalaag bouwen > Run workflow).
+#
+# Bij een harde validatiefout stopt de build, wordt er niets vastgelegd en blijft de
+# gepubliceerde data/ ongemoeid.
+
+name: Datalaag bouwen
+
+on:
+  push:
+    paths:
+      - 'source/**'
+      - 'covers/**'
+      - 'scripts/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # om de gebouwde data/ terug te committen
+  pages: write      # om na een wijziging een Pages-build aan te vragen
+
+# Twee runs op dezelfde branch zouden elkaars commit overschrijven.
+concurrency:
+  group: datalaag-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bouwen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Bouwen
+        run: node scripts/build.mjs
+
+      # Bewijst dat het terugvouwen van de doelcodes exact de bronstructuur oplevert.
+      # Faalt dit, dan is de datalaag onbruikbaar voor de fiche en leggen we niets vast.
+      - name: Rondrit door de hydratatie controleren
+        run: node scripts/verifieer.mjs
+
+      - name: Vastleggen
+        id: vastleggen
+        run: |
+          git add -A data
+          if git diff --cached --quiet; then
+            echo "De data is niet veranderd — niets vast te leggen."
+            echo "gewijzigd=nee" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          versie=$(node -e "process.stdout.write(require('./data/meta.json').versie)")
+          bron=$(node -e "process.stdout.write(String(require('./data/meta.json').gegenereerd))")
+          aantal=$(node -e "process.stdout.write(String(require('./data/meta.json').aantal))")
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Datalaag gebouwd: ${aantal} titels, bron ${bron}, versie ${versie}"
+          git push
+          echo "gewijzigd=ja" >> "$GITHUB_OUTPUT"
+
+      # GitHub bouwt de Pages-site niet altijd opnieuw na een push die door
+      # GITHUB_TOKEN gedaan is, dus vragen we die build expliciet aan. Alleen op de
+      # branch die Pages publiceert.
+      - name: Pages-build aanvragen
+        if: steps.vastleggen.outputs.gewijzigd == 'ja' && github.ref == 'refs/heads/main'
+        run: gh api --method POST "repos/${{ github.repository }}/pages/builds"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
