@@ -68,8 +68,22 @@ jobs:
       # GitHub bouwt de Pages-site niet altijd opnieuw na een push die door
       # GITHUB_TOKEN gedaan is, dus vragen we die build expliciet aan. Alleen op de
       # branch die Pages publiceert.
+      #
+      # Niet fataal: de data is op dit punt al gecommit en dat is het werk dat telt.
+      # Mislukt de aanvraag, dan bouwt Pages vaak alsnog op de push zelf; en anders is
+      # het één commando met de hand. Een rood kruis zou hier alleen maar de indruk
+      # geven dat de build mislukt is.
       - name: Pages-build aanvragen
         if: steps.vastleggen.outputs.gewijzigd == 'ja' && github.ref == 'refs/heads/main'
-        run: gh api --method POST "repos/${{ github.repository }}/pages/builds"
+        continue-on-error: true
+        run: |
+          if gh api --method POST "repos/${{ github.repository }}/pages/builds"; then
+            echo "Pages-build aangevraagd."
+          else
+            echo "::warning::De Pages-build kon niet aangevraagd worden. De data staat wel"
+            echo "::warning::gecommit. Controleer https://clavisdev.github.io/clavis-boekendata/data/meta.json"
+            echo "::warning::en vraag desnoods handmatig een build aan:"
+            echo "::warning::  gh api --method POST repos/${{ github.repository }}/pages/builds"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
