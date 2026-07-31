@@ -220,7 +220,11 @@ const isbnGezien = new Map();
 const coversOntbrekend = [], coverPlaceholder = [], fileUrlCovers = [];
 const zonderVl = [], zonderNl = [], zonderBeide = [];
 const toonregelHits = [], mojibakeHits = [];
+// Onder welke discipline(s) / leergebied(en) een doel voorkomt. De catalogus bewaart elk
+// doel één keer, maar de zoeker groepeert de doelenkeuze per discipline — zonder deze
+// koppeling zou die groepering niet te maken zijn uit doelen.json alleen.
 const disciplinePerCode = new Map();
+const leergebiedPerCode = new Map();
 const themacodeSentinels = new Set();
 const woordenschatDivergentie = { isbns: 0, extraWoorden: 0 };
 let metVragen = 0, metLeerkansen = 0, moeilijk = 0, koepelVermeldingen = 0;
@@ -315,6 +319,8 @@ for (const t of titels) {
       if (!kd.code) { fouten.push(`Kerndoel zonder code bij ${t.isbn} (${blok.leergebied}).`); continue; }
       if (!kd.kernzin) fouten.push(`Kerndoel ${kd.code} bij ${t.isbn} heeft geen kernzin.`);
       naarIndex(kd.code, t.isbn);
+      if (!leergebiedPerCode.has(kd.code)) leergebiedPerCode.set(kd.code, new Set());
+      leergebiedPerCode.get(kd.code).add(blok.leergebied);
 
       if (!kerndoelen.has(kd.code)) kerndoelen.set(kd.code, { kernzin: kd.kernzin ?? null, subdoelen: {} });
       const cat = kerndoelen.get(kd.code);
@@ -445,9 +451,22 @@ for (const t of titels) {
   });
 }
 
+// De disciplines en leergebieden komen er pas hier bij, niet in de catalogusmap zelf:
+// die map wordt tijdens de validatie veld voor veld vergeleken om drift te betrappen,
+// en een afgeleid veld hoort niet in die vergelijking.
 const doelen = {
-  minimumdoelen: Object.fromEntries([...minimumdoelen].sort(([a], [b]) => opCode(a, b))),
-  kerndoelen: Object.fromEntries([...kerndoelen].sort(([a], [b]) => opCode(a, b))),
+  minimumdoelen: Object.fromEntries(
+    [...minimumdoelen].sort(([a], [b]) => opCode(a, b)).map(([code, doel]) => [
+      code,
+      { ...doel, disciplines: [...(disciplinePerCode.get(code) ?? [])].sort(opCode) },
+    ]),
+  ),
+  kerndoelen: Object.fromEntries(
+    [...kerndoelen].sort(([a], [b]) => opCode(a, b)).map(([code, doel]) => [
+      code,
+      { ...doel, leergebieden: [...(leergebiedPerCode.get(code) ?? [])].sort(opCode) },
+    ]),
+  ),
 };
 
 const doelenIndexUit = Object.fromEntries(
