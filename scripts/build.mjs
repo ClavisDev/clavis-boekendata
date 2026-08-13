@@ -38,6 +38,10 @@
  *   - Geen voorraad. Leverbaarheid komt live uit Shopify; een momentopname in de JSON
  *     zou die tegenspreken.
  *
+ * Optioneel: source/shopify-covers.json (ISBN -> url van de voorkantcover in Shopify)
+ * vult `cover.shopify`. Dat is de cover die de site toont; bijwerken met
+ * `node scripts/covers-shopify.mjs`. Ontbreekt het bestand, dan blijft het veld null.
+ *
  * Optioneel: source/niveau-mapping.json normaliseert de vrije velden `niveau` en
  * `leeftijd` naar `graden` en `leeftijd_min`. Vorm:
  *   { "niveau":   { "<ruwe waarde>": { "graden": [1,2], "leeftijd_min": 6 } },
@@ -71,6 +75,14 @@ const woordenschatLos = leesBron('woordenschat.json') ?? {};
 const niveauMapping = existsSync(join(SOURCE, 'niveau-mapping.json'))
   ? JSON.parse(readFileSync(join(SOURCE, 'niveau-mapping.json'), 'utf8'))
   : null;
+
+// ISBN -> url van de voorkantcover in Shopify, aangemaakt door scripts/covers-shopify.mjs.
+// Bewust een gecommitteerde invoer en geen live call: de build blijft daardoor offline en
+// byte-identiek (de url's dragen een ?v=-stempel die verandert bij een nieuwe upload).
+// Ontbreekt het bestand, dan blijft `cover.shopify` null en werkt de rest gewoon.
+const shopifyCovers = existsSync(join(SOURCE, 'shopify-covers.json'))
+  ? JSON.parse(readFileSync(join(SOURCE, 'shopify-covers.json'), 'utf8'))
+  : {};
 
 /* ---------- determinisme ---------- */
 
@@ -159,9 +171,11 @@ function coverInfo(t) {
     ? [`toy-${t.ean || t.isbn}.png`, `cover-${t.ean || t.isbn}.jpg`]
     : [`cover-${t.isbn}.jpg`];
   const lokaalNaam = kandidaten.find((naam) => existsSync(join(COVERS, naam))) ?? null;
+  // Shopify staat op ean én isbn hetzelfde ingevuld, maar speelgoed wordt op ean gezocht.
+  const shopify = shopifyCovers[t.isbn] ?? shopifyCovers[t.ean] ?? null;
   // placeholder lokaal betekent dat de cdn-url hetzelfde plaatje levert: allebei leeg
-  if (lokaalNaam && isPlaceholderCover(lokaalNaam)) return { cdn: null, lokaal: null, placeholder: true };
-  return { cdn, lokaal: lokaalNaam ? `covers/${lokaalNaam}` : null };
+  if (lokaalNaam && isPlaceholderCover(lokaalNaam)) return { cdn: null, lokaal: null, shopify, placeholder: true };
+  return { cdn, lokaal: lokaalNaam ? `covers/${lokaalNaam}` : null, shopify };
 }
 
 // `#NO MATCH` is een sentinel uit de classificatiestap, geen thema. Aan een leerkracht
@@ -201,7 +215,7 @@ const tel = (obj, sleutel) => { const k = sleutel ?? '(leeg)'; obj[k] = (obj[k] 
 const perStatus = {}, perCategorie = {}, perHerkomst = {}, perScreeningsbron = {}, perHoofdpijler = {};
 const onbekendNiveau = new Map();
 const isbnGezien = new Map();
-const coversOntbrekend = [], coverPlaceholder = [], fileUrlCovers = [];
+const coversOntbrekend = [], coverPlaceholder = [], fileUrlCovers = [], zonderShopifyCover = [];
 const zonderVl = [], zonderNl = [], zonderBeide = [];
 const toonregelHits = [], mojibakeHits = [];
 // Onder welke discipline(s) / leergebied(en) een doel voorkomt. De catalogus bewaart elk
@@ -255,6 +269,8 @@ for (const t of titels) {
   const cover = coverInfo(t);
   if (cover.placeholder) coverPlaceholder.push(`${t.isbn} — ${t.titel}`);
   else if (!cover.lokaal) coversOntbrekend.push(`${t.isbn} — ${t.titel} (${t.categorie}${cover.cdn ? ', wel CDN-url' : ', ook geen CDN-url'})`);
+  // De site toont de Shopify-cover; zonder die url valt de titel terug op een tekstblok.
+  if (!cover.shopify) zonderShopifyCover.push(`${t.isbn} — ${t.titel} (${t.categorie})`);
 
   for (const tc of t.themacodes ?? []) if (!isEchteThemacode(tc)) themacodeSentinels.add(String(tc.code));
 
@@ -563,8 +579,10 @@ ${waarschuwingen.length ? waarschuwingen.map((w) => `- ⚠️ ${w}`).join('\n') 
 - Met klasvragen: ${metVragen} · met leerkansen (speelgoed): ${metLeerkansen}
 
 ## Covers
-- Titels zonder lokale cover: ${coversOntbrekend.length}${coversOntbrekend.length ? `\n${lijst(coversOntbrekend)}` : ' — ✅'}
-- Alleen een Magento-placeholder beschikbaar (site toont titeltekst): ${coverPlaceholder.length}${coverPlaceholder.length ? `\n${lijst(coverPlaceholder, 6)}` : ''}
+- **Shopify-cover (dit is wat de site toont): ${titels.length - zonderShopifyCover.length} van ${titels.length}.** Zonder cover — dus een tekstblok op de kaart en de fiche: ${zonderShopifyCover.length}${zonderShopifyCover.length ? `\n${lijst(zonderShopifyCover, 8)}` : ' — ✅'}
+  Bijwerken met \`node scripts/covers-shopify.mjs\`; een ontbrekend beeld hoort in Shopify opgelost te worden, niet hier.
+- Titels zonder lokale cover in \`covers/\`: ${coversOntbrekend.length}${coversOntbrekend.length ? `\n${lijst(coversOntbrekend, 6)}` : ' — ✅'}
+- Alleen een Magento-placeholder beschikbaar: ${coverPlaceholder.length}${coverPlaceholder.length ? `\n${lijst(coverPlaceholder, 6)}` : ''}
 - \`file:///\`-paden in cover_url (nooit als url gebruikt): ${fileUrlCovers.length}
 
 ## Doelendekking (leeg is bewust leeg)
