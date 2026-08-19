@@ -46,7 +46,7 @@ const MAX_HOOGTE = 480;
 
 const PRODUCTVELDEN = `{ edges { node { ... on Product {
   variants(first: 5) { edges { node { sku barcode } } }
-  images(first: 8) { edges { node { orig: url, opMaat: url(transform: { maxHeight: ${MAX_HOOGTE} }) } } }
+  images(first: 8) { edges { node { orig: url, altText, opMaat: url(transform: { maxHeight: ${MAX_HOOGTE} }) } } }
 } } } }`;
 
 async function vraagBatch(isbns) {
@@ -89,18 +89,34 @@ function kiesProduct(blok, isbn) {
 }
 
 /*
- * Niet blind `featuredImage` nemen: bij 10 titels is het eerste beeld de achterkant
- * (`cover_back`). We kiezen op bestandsnaam de voorkant en vallen alleen terug op het
- * eerste beeld als er geen `cover_front` bestaat — dan is de achterkant het enige dat
- * Shopify heeft, en dat is nog altijd beter dan een tekstblok.
+ * Niet blind `featuredImage` nemen: bij een reeks titels is het eerste beeld de
+ * achterkant (`cover_back`). We kiezen in deze volgorde:
+ *
+ *   1. een beeld met `cover_front` in de bestandsnaam — zo benoemt de bulkimport ze;
+ *   2. het eerste beeld dat géén achterkant is. Dat is een beeld dat iemand met de hand
+ *      geüpload heeft (bijvoorbeeld `9789044840308_1.jpg`) en dus de voorkant;
+ *   3. anders het eerste beeld: dan heeft Shopify alleen een achterkant, en dat is nog
+ *      altijd beter dan een tekstblok. Die titels staan met naam in het rapport, want ze
+ *      horen in Shopify opgelost te worden, niet hier.
+ *
+ * Stap 2 bestaat omdat de positie in Shopify niets belooft. De oudere regel ("anders het
+ * eerste beeld") gaf de juiste voorkant zolang die vooraan stond; verschoof iemand de
+ * beelden, dan stond de achterkant zonder waarschuwing weer op de site.
  */
+const isAchterkant = (beeld) =>
+  String(beeld.orig).includes('cover_back') || String(beeld.altText ?? '').trim() === 'cover_back';
+
 function kiesVoorkant(product) {
   const beelden = (product?.images?.edges ?? []).map(({ node }) => node).filter((n) => n?.opMaat);
   if (!beelden.length) return { url: null, reden: 'product-zonder-beeld' };
-  const voorkant = beelden.find((n) => String(n.orig).includes('cover_front'));
-  return voorkant
-    ? { url: voorkant.opMaat, reden: 'cover_front' }
-    : { url: beelden[0].opMaat, reden: 'geen-cover_front' };
+
+  const cover_front = beelden.find((n) => String(n.orig).includes('cover_front'));
+  if (cover_front) return { url: cover_front.opMaat, reden: 'cover_front' };
+
+  const geenAchterkant = beelden.find((n) => !isAchterkant(n));
+  if (geenAchterkant) return { url: geenAchterkant.opMaat, reden: 'ander-beeld' };
+
+  return { url: beelden[0].opMaat, reden: 'alleen-achterkant' };
 }
 
 /* ---------- run ---------- */
@@ -110,8 +126,15 @@ const isbns = (bron.titels ?? []).map((t) => t.isbn).filter(Boolean);
 if (!isbns.length) throw new Error('Geen ISBN\'s in de bron gevonden — is source/boekmappings.json compleet?');
 
 const covers = {};
-const tellingen = { cover_front: 0, 'geen-cover_front': 0, 'product-zonder-beeld': 0, 'geen-product': 0 };
+const tellingen = {
+  cover_front: 0,
+  'ander-beeld': 0,
+  'alleen-achterkant': 0,
+  'product-zonder-beeld': 0,
+  'geen-product': 0,
+};
 const zonderCover = [];
+const alleenAchterkant = [];
 
 for (let start = 0; start < isbns.length; start += BATCH) {
   const groep = isbns.slice(start, start + BATCH);
@@ -125,6 +148,7 @@ for (let start = 0; start < isbns.length; start += BATCH) {
     }
     const { url, reden } = kiesVoorkant(product);
     tellingen[reden]++;
+    if (reden === 'alleen-achterkant') alleenAchterkant.push(isbn);
     if (url) covers[isbn] = url;
     else zonderCover.push(`${isbn} (product zonder beeld)`);
   });
@@ -141,8 +165,10 @@ console.log(`# Shopify-covers
 
 - Titels in de bron: ${isbns.length}
 - Met voorkantcover (\`cover_front\`): ${tellingen.cover_front}
-- Alleen een ander beeld beschikbaar (achterkant of los beeld): ${tellingen['geen-cover_front']}
+- Voorkant onder een eigen bestandsnaam (met de hand geüpload): ${tellingen['ander-beeld']}
+- **Alleen een achterkant in Shopify:** ${tellingen['alleen-achterkant']}
 - Shopify-product zonder enig beeld: ${tellingen['product-zonder-beeld']}
 - Geen Shopify-product op sku/barcode: ${tellingen['geen-product']}
 - Weggeschreven naar source/shopify-covers.json: ${Object.keys(gesorteerd).length}
+${alleenAchterkant.length ? `\nAlleen een achterkant (${alleenAchterkant.length}) — de site toont dan de rug van het boek.\nEen voorkant in Shopify zetten lost dit op; de volgende synchronisatie pakt hem op:\n${alleenAchterkant.map((r) => `  - ${r}`).join('\n')}` : ''}
 ${zonderCover.length ? `\nZonder cover (${zonderCover.length}) — dit is een vraag voor het team, niet voor de build:\n${zonderCover.map((r) => `  - ${r}`).join('\n')}` : ''}`);
