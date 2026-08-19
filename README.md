@@ -117,8 +117,8 @@ Stand op 19 augustus 2026 — het rapport van de synchronisatie telt dit elke ru
 | | Titels |
 |---|---|
 | Voorkantcover (`cover_front`) uit Shopify | 938 |
-| Voorkant onder een eigen bestandsnaam, met de hand geüpload | 3 |
-| Alleen een achterkant → **de rug van het boek op de site** | 7 |
+| Voorkant onder een eigen bestandsnaam, met de hand geüpload | 10 |
+| Alleen een achterkant → **de rug van het boek op de site** | 0 |
 | Shopify-product zonder enig beeld → **tekstblok op de site** | 95 |
 | Geen Shopify-product op sku/barcode → **tekstblok op de site** | 22 |
 
