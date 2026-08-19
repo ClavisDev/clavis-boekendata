@@ -44,8 +44,8 @@ edit hier. Verwijder je `data/`, dan bouwt de volgende run het opnieuw.
    genegeerd. Zet er nooit twee vormen naast elkaar — dan stopt de build, omdat niet te
    zien is welke generatie de bedoelde is.
 
-2. Covers: die komen uit Shopify. `node scripts/covers-shopify.mjs` en het resultaat
-   meecommitten (zie [Covers](#covers)). `covers/` hoeft niet meer bijgewerkt te worden.
+2. Covers hoef je niet aan te raken: die komen uit Shopify en worden elke nacht
+   gesynchroniseerd (zie [Covers](#covers)). `covers/` hoeft niet meer bijgewerkt te worden.
 3. Committen en pushen naar `main`.
 
 De workflow **Datalaag bouwen** doet de rest: bouwen, valideren, `data/` terugcommitten
@@ -90,27 +90,41 @@ De site toont **de cover uit Shopify** (`cover.shopify`). Dat is een bewuste keu
 13 augustus 2026: Shopify is de plek waar de covers onderhouden worden, dus daar staan ze
 compleet en actueel. De keerzijde staat hieronder — 117 titels hebben er geen beeld.
 
+**Dit gaat automatisch.** De workflow **Shopify-covers synchroniseren** draait elke nacht
+om 04:30 UTC: hij haalt de covers op, en alléén als er iets veranderd is legt hij
+`source/shopify-covers.json` vast en laat hij de datalaag opnieuw bouwen. Zet iemand vandaag
+een cover in Shopify, dan staat hij morgen op de site. Wil je niet wachten: Actions >
+Shopify-covers synchroniseren > Run workflow. Met de hand kan ook nog:
+
 ```sh
 node scripts/covers-shopify.mjs   # schrijft source/shopify-covers.json
 node scripts/build.mjs            # zet ze in cover.shopify
 ```
 
-Draai dat wanneer er covers bijkomen of veranderen in Shopify. Waarom een gecommitteerd
-bestand en geen call in de build: de build hoort offline te draaien en byte-identiek te
-zijn, en de Shopify-url's dragen een `?v=`-stempel die verandert zodra iemand een beeld
-opnieuw uploadt. Nu zie je in de git-diff precies welke covers wijzigen.
+Waarom een gecommitteerd bestand en geen call in de build: de build hoort offline te draaien
+en byte-identiek te zijn, en de Shopify-url's dragen een `?v=`-stempel die verandert zodra
+iemand een beeld opnieuw uploadt. Nu zie je in de git-diff precies welke covers wijzigen, en
+praat er één workflow naar buiten in plaats van elke build.
 
-Stand op 13 augustus 2026 — het buildrapport telt dit elke run opnieuw:
+Welk beeld van een product de cover wordt, in deze volgorde: een bestandsnaam met
+`cover_front`; anders het eerste beeld dat geen achterkant is (met de hand geüploade
+voorkanten heten bijvoorbeeld `9789044840308_1.jpg`); anders de achterkant, want die is nog
+altijd beter dan een tekstblok. Op de positie in Shopify vertrouwen we niet — beelden
+verschuiven daar.
+
+Stand op 19 augustus 2026 — het rapport van de synchronisatie telt dit elke run opnieuw:
 
 | | Titels |
 |---|---|
 | Voorkantcover (`cover_front`) uit Shopify | 938 |
-| Alleen een ander beeld — Shopify heeft geen voorkant | 10 |
+| Voorkant onder een eigen bestandsnaam, met de hand geüpload | 3 |
+| Alleen een achterkant → **de rug van het boek op de site** | 7 |
 | Shopify-product zonder enig beeld → **tekstblok op de site** | 95 |
 | Geen Shopify-product op sku/barcode → **tekstblok op de site** | 22 |
 
-Die laatste twee groepen zijn een vraag voor het team, niet voor deze repo: een ontbrekend
-beeld hoort in Shopify opgelost te worden. Het rapport noemt ze bij ISBN.
+Die laatste drie groepen zijn een vraag voor het team, niet voor deze repo: een ontbrekend
+of verkeerd beeld hoort in Shopify opgelost te worden, en de eerstvolgende nacht pikt de
+synchronisatie het op. Het rapport noemt ze bij ISBN.
 
 De url's vragen `maxHeight: 480` op — pariteit met `covers/`, en Shopify levert op dezelfde
 url automatisch webp aan browsers die dat aankunnen (~39 kB in plaats van ~84 kB jpeg).

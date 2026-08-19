@@ -1,0 +1,89 @@
+# Haalt de coverbeelden opnieuw uit Shopify en laat de datalaag opnieuw bouwen als er
+# iets veranderd is.
+#
+# Waarom een aparte workflow en niet een stap in de build: de build hoort offline te
+# draaien en byte-identieke output te geven (zie scripts/covers-shopify.mjs). Dit is de
+# enige plek in de repo die naar buiten praat. Verandert er niets in Shopify, dan is er
+# geen commit en geen build — een stille nacht kost dus niets.
+#
+# Draait elke nacht en met de hand (Actions > Shopify-covers synchroniseren > Run
+# workflow). Het Storefront-token staat als publieke standaard in het script zelf; hier
+# hoeft dus geen secret. Let op: GitHub zet een geplande workflow uit na 60 dagen zonder
+# activiteit in de repo — dan is één handmatige run genoeg om hem weer aan te zetten.
+
+name: Shopify-covers synchroniseren
+
+on:
+  schedule:
+    - cron: '30 4 * * *'   # 04:30 UTC — klaar voor de werkdag begint
+  workflow_dispatch:
+
+permissions:
+  contents: write   # om source/shopify-covers.json vast te leggen
+  pages: write      # de build die hierna volgt vraagt een Pages-build aan
+
+# Nooit twee synchronisaties tegelijk: ze zouden elkaars commit overschrijven. En anders
+# dan bij de build willen we een lopende run niet afbreken — die kan al gepusht hebben.
+concurrency:
+  group: shopify-covers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synchroniseren:
+    runs-on: ubuntu-latest
+    outputs:
+      gewijzigd: ${{ steps.vastleggen.outputs.gewijzigd }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Het rapport van het script (hoeveel titels een voorkant hebben, welke geen beeld
+      # hebben) komt in de samenvatting van de run te staan. Dat is de plek waar je na een
+      # nacht kijkt, zonder logs open te klappen.
+      - name: Covers uit Shopify halen
+        run: node scripts/covers-shopify.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Vastleggen
+        id: vastleggen
+        run: |
+          git add source/shopify-covers.json
+          if git diff --cached --quiet; then
+            echo "Geen wijziging in Shopify — niets vast te leggen."
+            echo "gewijzigd=nee" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Tellen op bestandsnaam, niet op regels: een beeld dat in Shopify opnieuw
+          # geüpload is krijgt een nieuwe ?v=-stempel op dezelfde bestandsnaam. Dat is een
+          # echte wijziging (de oude url verdwijnt), maar geen andere cover, en dat hoort
+          # in de commitboodschap te kloppen.
+          aantal=$(node -e '
+            const { execSync } = require("node:child_process");
+            const oud = JSON.parse(execSync("git show HEAD:source/shopify-covers.json", { encoding: "utf8" }));
+            const nieuw = require("./source/shopify-covers.json");
+            const naam = (u) => (u ? u.split("/").pop().split("?")[0] : null);
+            const sleutels = new Set([...Object.keys(oud), ...Object.keys(nieuw)]);
+            let n = 0;
+            for (const s of sleutels) if (naam(oud[s]) !== naam(nieuw[s])) n++;
+            process.stdout.write(String(n));
+          ')
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Shopify-covers gesynchroniseerd: ${aantal} andere cover(s)"
+          git push
+          echo "gewijzigd=ja" >> "$GITHUB_OUTPUT"
+
+  # De build is en blijft de enige plek die data/ maakt. We roepen hem hier aan in plaats
+  # van hem te herhalen; een push door GITHUB_TOKEN start namelijk zelf geen workflow, dus
+  # op de push van hierboven zou "Datalaag bouwen" nooit vanzelf aanslaan.
+  bouwen:
+    needs: synchroniseren
+    if: needs.synchroniseren.outputs.gewijzigd == 'ja'
+    permissions:
+      contents: write
+      pages: write
+    uses: ./.github/workflows/build.yml

@@ -6,6 +6,10 @@
 #
 # Bij een harde validatiefout stopt de build, wordt er niets vastgelegd en blijft de
 # gepubliceerde data/ ongemoeid.
+#
+# "Shopify-covers synchroniseren" roept deze workflow aan (workflow_call) nadat hij een
+# nieuwe cover heeft vastgelegd. Dat moet expliciet: een push die door GITHUB_TOKEN gedaan
+# is, start zelf geen workflow, dus de push-trigger hierboven slaat daar niet op aan.
 
 name: Datalaag bouwen
 
@@ -17,6 +21,7 @@ on:
       - 'scripts/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: write   # om de gebouwde data/ terug te committen
@@ -31,9 +36,13 @@ jobs:
   bouwen:
     runs-on: ubuntu-latest
     steps:
+      # Standaard checkt de action `github.sha` uit. Bij een aanroep vanuit
+      # "Shopify-covers synchroniseren" is dat de commit van vóór de synchronisatie — we
+      # zouden dan de oude covers bouwen. De kop van de branch is altijd wat we bedoelen.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
